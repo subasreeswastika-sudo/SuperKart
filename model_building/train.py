@@ -109,7 +109,7 @@ except RepositoryNotFoundError:
     create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
     print(f"Model Space '{repo_id}' created.")
 
-# create_repo("best_machine_failure_model", repo_type="model", private=False)
+# create_repo("SuperKart", repo_type="model", private=False)
 api.upload_file(
     path_or_fileobj="SuperKart_model_v1.joblib",
     path_in_repo="SuperKart_model_v1.joblib",
