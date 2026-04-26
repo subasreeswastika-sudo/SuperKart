@@ -1,0 +1,35 @@
+name: SuperKart End-to-End Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  run-mlops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Data Preparation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python SuperKart/model_building/prep.py
+
+      - name: Model Training & Evaluation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python SuperKart/model_building/train.py
+
+      - name: Deploy to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python SuperKart/hosting/hosting.py
