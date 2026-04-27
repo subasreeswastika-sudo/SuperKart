@@ -1,119 +1,82 @@
-# for data manipulation
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import make_column_transformer
-from sklearn.pipeline import make_pipeline
-# for model training, tuning, and evaluation
+from sklearn.pipeline import Pipeline
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score
-# for model serialization
 import joblib
-# for creating a folder
 import os
-# for hugging face space authentication to upload files
-from huggingface_hub import login, HfApi, create_repo
-from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
+from huggingface_hub import HfApi, create_repo
 
-api = HfApi()
+# Load data
+Xtrain = pd.read_csv("https://huggingface.co/datasets/swastisubi/SuperKart/Xtrain.csv")
+# ... same for others
 
-Xtrain_path = "https://huggingface.co/datasets/swastisubi/SuperKart/Xtrain.csv"
-Xtest_path = "https://huggingface.co/datasets/swastisubi/SuperKart/Xtest.csv"
-ytrain_path = "https://huggingface.co/datasets/swastisubi/SuperKart/ytrain.csv"
-ytest_path = "https://huggingface.co/datasets/swastisubi/SuperKart/ytest.csv"
+ytrain = ytrain.iloc[:, 0]
+ytest = ytest.iloc[:, 0]
 
-Xtrain = pd.read_csv(Xtrain_path)
-Xtest = pd.read_csv(Xtest_path)
-ytrain = pd.read_csv(ytrain_path)
-ytest = pd.read_csv(ytest_path)
+# Preprocessor (unchanged)
+numeric_features = ['Product_Weight', 'Product_Allocated_Area', 'Product_MRP', 'Store_Establishment_Year']
+categorical_features = ['Product_Sugar_Content', 'Product_Type', 'Store_Size',
+                        'Store_Location_City_Type', 'Store_Type', 'Store_Id']
 
-
-# One-hot encode 'Type' and scale numeric features
-numeric_features = [
-    'Product_Weight',
-    'Product_Allocated_Area',
-    'Product_MRP',
-    'Store_Establishment_Year'
-
-]
-categorical_features = ['Product_Sugar_Content',
-                        'Product_Type',
-                        'Store_Size',
-                        'Store_Location_City_Type',
-                        'Store_Type',
-                        'Store_Id'
-                        ]
-
-
-# Preprocessing pipeline
 preprocessor = make_column_transformer(
     (StandardScaler(), numeric_features),
-    (OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    (OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_features)  # sparse_output=False is safer with newer sklearn
 )
 
-# Define XGBoost regressor model
-xgb_model = xgb.XGBRegressor(random_state=42)
+xgb_model = xgb.XGBRegressor(random_state=42, n_jobs=-1)  # added n_jobs for speed
 
-# Define hyperparameter grid
+model_pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('xgb', xgb_model)
+])
+
 param_grid = {
-    'xgbregressor__n_estimators': [50, 75, 100],
-    'xgbregressor__max_depth': [2, 3, 4],
-    'xgbregressor__colsample_bytree': [0.4, 0.5, 0.6],
-    'xgbregressor__colsample_bylevel': [0.4, 0.5, 0.6],
-    'xgbregressor__learning_rate': [0.01, 0.05, 0.1],
-    'xgbregressor__reg_lambda': [0.4, 0.5, 0.6],
+    'xgb__n_estimators': [50, 75, 100],
+    'xgb__max_depth': [2, 3, 4],
+    'xgb__colsample_bytree': [0.4, 0.5, 0.6],
+    'xgb__colsample_bylevel': [0.4, 0.5, 0.6],
+    'xgb__learning_rate': [0.01, 0.05, 0.1],
+    'xgb__reg_lambda': [0.4, 0.5, 0.6],
 }
 
-# Create pipeline
-model_pipeline = make_pipeline(preprocessor, xgb_model)
+grid_search = GridSearchCV(
+    model_pipeline,
+    param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=-1,
+    verbose=1   # helpful to see progress
+)
 
-# Grid search with cross-validation using a regression scoring metric
-grid_search = GridSearchCV(model_pipeline, param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
 grid_search.fit(Xtrain, ytrain)
 
-# Best model
-best_model = grid_search.best_estimator_
-print("Best Params:\n", grid_search.best_params_)
+print("Best Params:", grid_search.best_params_)
 
-# Predict on training set
-y_pred_train = best_model.predict(Xtrain)
+# Evaluation (unchanged)
+y_pred_train = grid_search.predict(Xtrain)
+y_pred_test = grid_search.predict(Xtest)
 
-# Predict on test set
-y_pred_test = best_model.predict(Xtest)
+print("\nTraining R2:", r2_score(ytrain, y_pred_train))
+print("Training MSE:", mean_squared_error(ytrain, y_pred_train))
+print("\nTest R2:", r2_score(ytest, y_pred_test))
+print("Test MSE:", mean_squared_error(ytest, y_pred_test))
 
-# Evaluation
-print("\nTraining Evaluation:")
-print(f"R2 Score: {r2_score(ytrain, y_pred_train):.4f}")
-print(f"Mean Squared Error: {mean_squared_error(ytrain, y_pred_train):.4f}")
+joblib.dump(grid_search.best_estimator_, "model.joblib")
 
-print("\nTest Evaluation:")
-print(f"R2 Score: {r2_score(ytest, y_pred_test):.4f}")
-print(f"Mean Squared Error: {mean_squared_error(ytest, y_pred_test):.4f}")
-
-# Save best model
-joblib.dump(best_model, "model.joblib")
-
-# Upload to Hugging Face
-repo_id = "swastisubi/SuperKart"
-repo_type = "model"
-
+# Upload
 api = HfApi(token=os.getenv("HF_TOKEN"))
+repo_id = "swastisubi/SuperKart"
 
-# Step 1: Check if the space exists
-try:
-    api.repo_info(repo_id=repo_id, repo_type=repo_type)
-    print(f"Model Space '{repo_id}' already exists. Using it.")
-except RepositoryNotFoundError:
-    print(f"Model Space '{repo_id}' not found. Creating new space...")
-    create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
-    print(f"Model Space '{repo_id}' created.")
+create_repo(repo_id, repo_type="model", exist_ok=True)
 
-# create_repo("SuperKart", repo_type="model", private=False)
 api.upload_file(
     path_or_fileobj="model.joblib",
     path_in_repo="model.joblib",
     repo_id=repo_id,
-    repo_type=repo_type,
+    repo_type="model"
 )
 
 
