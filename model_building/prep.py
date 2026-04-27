@@ -12,8 +12,8 @@ from huggingface_hub import login, HfApi
 
 # Define constants for the dataset and output paths
 api = HfApi(token=os.getenv("HF_TOKEN"))
-DATASET_PATH = "https://huggingface.co/datasets/swastisubi/SuperKart/SuperKart.csv"
-df = pd.read_csv(DATASET_PATH)
+DATASET_PATH = "hf://datasets/swastisubi/SuperKart/SuperKart.csv"
+df = pd.read_csv(DATASET_PATH, storage_options={"token":token})
 print("Dataset loaded successfully.")
 
 # Drop the unique identifier
@@ -48,3 +48,9 @@ for file_path in files:
         repo_id="swastisubi/SuperKart",
         repo_type="dataset",
     )
+
+
+
+
+
+
