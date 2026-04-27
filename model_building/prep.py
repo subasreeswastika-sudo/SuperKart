@@ -11,7 +11,8 @@ from sklearn.preprocessing import LabelEncoder
 from huggingface_hub import login, HfApi
 
 # Define constants for the dataset and output paths
-api = HfApi(token = os.getenv("HF_TOKEN"))
+token = os.getenv("HF_TOKEN")
+api = HfApi(token)
 DATASET_PATH = "hf://datasets/swastisubi/SuperKart/SuperKart.csv"
 df = pd.read_csv(DATASET_PATH, storage_options={"token": token})
 print("Dataset loaded successfully.")
