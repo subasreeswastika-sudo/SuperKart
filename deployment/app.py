@@ -13,18 +13,17 @@ st.markdown("This application predicts **total revenue** using an XGBoost model.
 # ==========================
 # Safe Model Loading
 # ==========================
-@st.cache_resource(show_spinner="Loading model from Hugging Face...")
+@st.cache_resource(show_spinner="Loading model...")
 def load_model():
     REPO_ID = "swastisubi/SuperKart"
     FILENAME = "model.joblib"
     
     try:
-        # Force anonymous access since repo is public
         model_path = hf_hub_download(
             repo_id=REPO_ID,
             filename=FILENAME,
             repo_type="model",
-            token=None          # Important: No token for public repo
+            token=None   # Try anonymous first (for public repo)
         )
         model = joblib.load(model_path)
         st.success("✅ Model loaded successfully!")
@@ -32,19 +31,21 @@ def load_model():
     except Exception as e:
         st.error(f"❌ Failed to load model: {str(e)}")
         st.markdown("""
-        **Troubleshooting Steps:**
-        1. Make sure `model.joblib` is visible here:  
-           https://huggingface.co/swastisubi/SuperKart/tree/main
-        2. If not visible, re-run your `train.py` to re-upload the model.
+        ### How to Fix:
+        1. Go to **https://huggingface.co/swastisubi/SuperKart**
+        2. Click **"Agree and access repository"** if prompted.
         3. Then **Factory Restart** this Space.
+        
+        **Alternative (clean fix):**
+        - Delete this repo from HF Settings.
+        - Re-run your `train.py` to create a fresh public repo.
         """)
         st.stop()
 
-# Load the model safely
 model = load_model()
 
 # ==========================
-# User Input
+# User Input + Tabs (Same as before)
 # ==========================
 st.sidebar.header("Input Product & Store Details")
 
@@ -84,9 +85,6 @@ def get_user_input():
 
 input_df = get_user_input()
 
-# ==========================
-# Main Tabs
-# ==========================
 tab1, tab2 = st.tabs(["📋 Input & Prediction", "📊 Feature Importance"])
 
 with tab1:
@@ -95,29 +93,25 @@ with tab1:
 
     if st.button("🚀 Predict Total Sales", type="primary"):
         with st.spinner("Making prediction..."):
-            try:
-                prediction = model.predict(input_df)   # Now 'model' is guaranteed to exist
-                pred_value = float(prediction[0])
-                
-                st.success("✅ Prediction Complete!")
-                st.metric(label="Predicted Total Revenue", value=f"₹{pred_value:,.2f}")
-                
-                if pred_value > 4000:
-                    st.info("💡 High Volume Alert: Strong performer expected!")
-                else:
-                    st.warning("📉 Low Volume Alert: Optimization may be needed.")
+            prediction = model.predict(input_df)
+            pred_value = float(prediction[0])
+            
+            st.success("✅ Prediction Complete!")
+            st.metric(label="Predicted Total Revenue", value=f"₹{pred_value:,.2f}")
+            
+            if pred_value > 4000:
+                st.info("💡 High Volume Alert: Strong performer expected!")
+            else:
+                st.warning("📉 Low Volume Alert: Optimization may be needed.")
 
-                # Download option
-                csv = input_df.copy()
-                csv["Predicted_Revenue"] = pred_value
-                st.download_button(
-                    label="📥 Download Prediction as CSV",
-                    data=csv.to_csv(index=False).encode('utf-8'),
-                    file_name="superkart_prediction.csv",
-                    mime="text/csv"
-                )
-            except Exception as e:
-                st.error(f"Prediction failed: {str(e)}")
+            csv = input_df.copy()
+            csv["Predicted_Revenue"] = pred_value
+            st.download_button(
+                label="📥 Download Prediction as CSV",
+                data=csv.to_csv(index=False).encode('utf-8'),
+                file_name="superkart_prediction.csv",
+                mime="text/csv"
+            )
 
 with tab2:
     st.subheader("Feature Importance")
@@ -131,8 +125,7 @@ with tab2:
                 'Importance': xgb_model.feature_importances_
             }).sort_values('Importance', ascending=False).head(15)
             
-            fig = px.bar(imp_df, x='Importance', y='Feature', orientation='h', 
-                        title="Top 15 Most Important Features")
+            fig = px.bar(imp_df, x='Importance', y='Feature', orientation='h', title="Top 15 Most Important Features")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(imp_df, use_container_width=True)
         except Exception as e:
