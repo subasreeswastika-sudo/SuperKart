@@ -1,23 +1,25 @@
-# Use a minimal base image with Python 3.9 installed
+# 1. Base Image: Use the official lightweight Python image
 FROM python:3.9
 
-# Set the working directory inside the container to /app
+# 2. Set the working directory inside the container
 WORKDIR /app
 
-# Copy all files from the current directory on the host to the container's /app directory
+# 3. Copy the requirements file and install dependencies
+# We do this before copying the rest of the code to leverage Docker cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4. Copy the rest of the application code 
+# (This includes app.py and any local assets)
 COPY . .
 
-# Install Python dependencies listed in requirements.txt
-RUN pip3 install -r requirements.txt
+# 5. Environment Variables
+# Ensures Python output is sent straight to the terminal without buffering
+ENV PYTHONUNBUFFERED=1
 
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user \
-	PATH=/home/user/.local/bin:$PATH
+# 6. Expose the default Streamlit port (7860 is the default for HF Spaces)
+EXPOSE 7860
 
-WORKDIR $HOME/app
-
-COPY --chown=user . $HOME/app
-
-# Define the command to run the Streamlit app on port "8501" and make it accessible externally
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.enableXsrfProtection=false"]
+# 7. Command to run the application
+# We bind to 0.0.0.0 and port 7860 to satisfy HF Space requirements
+CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]
