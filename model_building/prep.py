@@ -13,7 +13,7 @@ from huggingface_hub import login, HfApi
 # Define constants for the dataset and output paths
 token = os.getenv("HF_TOKEN")
 api = HfApi(token)
-DATASET_PATH = "hf://datasets/swastisubi/SuperKart/SuperKart.csv"
+DATASET_PATH = "https://huggingface.co/datasets/swastisubi/SuperKart/SuperKart.csv"
 df = pd.read_csv(DATASET_PATH)
 print("Dataset loaded successfully.")
 
