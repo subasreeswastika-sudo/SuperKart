@@ -11,15 +11,21 @@ st.title("📈 SuperKart Weekly Sales Forecast")
 st.markdown("This application predicts **total revenue** using an XGBoost model.")
 
 # ==========================
-# Model Loading with Better Handling
+# Model Loading - Safe Token Handling
 # ==========================
 @st.cache_resource(show_spinner="Loading model...")
 def load_model():
     REPO_ID = "swastisubi/SuperKart"
     FILENAME = "model.joblib"
     
-    token = os.getenv("HF_TOKEN") or st.secrets.get("HF_TOKEN")
-    
+    # Safe way to get token - avoid triggering StreamlitSecretNotFoundError
+    token = os.getenv("HF_TOKEN")
+    if not token and hasattr(st, "secrets"):
+        try:
+            token = st.secrets.get("HF_TOKEN")
+        except Exception:
+            token = None  # No secrets defined → treat as None
+
     try:
         model_path = hf_hub_download(
             repo_id=REPO_ID,
@@ -28,16 +34,18 @@ def load_model():
             token=token
         )
         model = joblib.load(model_path)
-        st.success("✅ Model loaded successfully from Hugging Face!")
+        st.success("✅ Model loaded successfully!")
         return model
     except Exception as e:
-        error_str = str(e).lower()
-        if "401" in error_str or "gated" in error_str or "restricted" in error_str:
-            st.error("❌ Cannot access the model (401 Unauthorized)")
-            st.info("**Solution:**\n"
-                    "1. Go to your model repo → Settings → Set visibility to **Public**\n"
-                    "OR\n"
-                    "2. Add `HF_TOKEN` secret in your Space Settings → Variables and secrets")
+        error_msg = str(e).lower()
+        if "401" in error_msg or "gated" in error_msg or "restricted" in error_msg or "access" in error_msg:
+            st.error("❌ Cannot access the model (401 Unauthorized / Restricted Repo)")
+            st.markdown("""
+            **Quick Fix (Recommended):**
+            1. Go to your model repo: https://huggingface.co/swastisubi/SuperKart
+            2. Click **Settings** → Change **Repository visibility** to **Public**
+            3. Save and then **Factory Restart** this Space
+            """)
         else:
             st.error(f"❌ Error loading model: {str(e)}")
         st.stop()
@@ -45,7 +53,7 @@ def load_model():
 model = load_model()
 
 # ==========================
-# Rest of your app (User Input, Prediction, Feature Importance)
+# User Input
 # ==========================
 st.sidebar.header("Input Product & Store Details")
 
@@ -64,7 +72,9 @@ def get_user_input():
     s_year = st.sidebar.number_input("Store Establishment Year", min_value=1980, max_value=2026, value=2010)
     s_size = st.sidebar.selectbox("Store Size", ["High", "Medium", "Small"])
     s_city = st.sidebar.selectbox("City Type", ["Tier 1", "Tier 2", "Tier 3"])
-    s_type = st.sidebar.selectbox("Store Type", ['Supermarket Type1', 'Supermarket Type2', 'Food Mart', 'Departmental Store'])
+    s_type = st.sidebar.selectbox("Store Type", [
+        'Supermarket Type1', 'Supermarket Type2', 'Food Mart', 'Departmental Store'
+    ])
     s_id = st.sidebar.selectbox("Store ID", ["OUT049", "OUT018", "OUT046", "OUT035", "OUT045", "OUT027"])
 
     data = {
@@ -83,6 +93,9 @@ def get_user_input():
 
 input_df = get_user_input()
 
+# ==========================
+# Tabs
+# ==========================
 tab1, tab2 = st.tabs(["📋 Input & Prediction", "📊 Feature Importance"])
 
 with tab1:
@@ -90,7 +103,7 @@ with tab1:
     st.dataframe(input_df, use_container_width=True)
 
     if st.button("🚀 Predict Total Sales", type="primary"):
-        with st.spinner("Predicting..."):
+        with st.spinner("Making prediction..."):
             prediction = model.predict(input_df)
             pred_value = float(prediction[0])
             
@@ -102,7 +115,7 @@ with tab1:
             else:
                 st.warning("📉 Low Volume Alert: Optimization may be needed.")
 
-            # Download option
+            # Download CSV
             csv = input_df.copy()
             csv["Predicted_Revenue"] = pred_value
             st.download_button(
@@ -124,11 +137,12 @@ with tab2:
                 'Importance': xgb_model.feature_importances_
             }).sort_values('Importance', ascending=False).head(15)
             
-            fig = px.bar(imp_df, x='Importance', y='Feature', orientation='h', title="Top 15 Features")
+            fig = px.bar(imp_df, x='Importance', y='Feature', orientation='h', 
+                        title="Top 15 Most Important Features")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(imp_df, use_container_width=True)
         except Exception as e:
-            st.error(f"Feature importance unavailable: {str(e)}")
+            st.error(f"Could not show feature importance: {str(e)}")
 
 st.markdown("---")
 st.caption("Developed by Subasree | SuperKart MLOps Project")
