@@ -13,9 +13,15 @@ from huggingface_hub import login, HfApi
 # Define constants for the dataset and output paths
 token = os.getenv("HF_TOKEN")
 api = HfApi(token)
-DATASET_PATH = "hf://datasets/swastisubi/SuperKart/SuperKart.csv"
-df = pd.read_csv(DATASET_PATH)
-print("Dataset loaded successfully.")
+try:
+    DATASET_PATH = f"https://huggingface.co/datasets/{repo_id}/resolve/main/SuperKart.csv"
+    df = pd.read_csv(DATASET_PATH)
+    print("Dataset loaded successfully from Hugging Face.")
+except Exception as e:
+    print(f"Error loading dataset: {e}")
+    # Fallback to local file if remote fails
+    df = pd.read_csv("SuperKart.csv")
+
 
 # Drop the unique identifier
 df.drop(columns=['Product_Id'], inplace=True)
