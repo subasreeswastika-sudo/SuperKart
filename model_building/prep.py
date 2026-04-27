@@ -14,7 +14,7 @@ from huggingface_hub import login, HfApi
 token = os.getenv("HF_TOKEN")
 api = HfApi(token)
 try:
-    DATASET_PATH = f"https://huggingface.co/datasets/{repo_id}/resolve/main/SuperKart.csv"
+    DATASET_PATH = f"https://huggingface.co/datasets/swastisubi/SuperKart/SuperKart.csv"
     df = pd.read_csv(DATASET_PATH)
     print("Dataset loaded successfully from Hugging Face.")
 except Exception as e:
