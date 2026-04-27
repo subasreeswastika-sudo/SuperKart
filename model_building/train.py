@@ -10,28 +10,49 @@ import os
 
 # Hugging Face imports
 from huggingface_hub import hf_hub_download, HfApi, create_repo
+from huggingface_hub.utils import HfHubHTTPError
 
 # ==========================
-# 1. Load Data from Hugging Face Dataset
+# 1. Load Data from Hugging Face Dataset (Robust Version)
 # ==========================
 DATASET_REPO = "swastisubi/SuperKart"
 
 def load_hf_csv(filename: str):
-    """Reliable way to download CSV from HF dataset"""
-    local_path = hf_hub_download(
-        repo_id=DATASET_REPO,
-        filename=filename,
-        repo_type="dataset",
-        # token=os.getenv("HF_TOKEN")   # Uncomment if your dataset is private
-    )
-    return pd.read_csv(local_path)
+    """Try hf_hub_download without token first, fallback to direct URL"""
+    try:
+        # For public datasets: do NOT pass token (prevents 401 from empty/invalid token)
+        local_path = hf_hub_download(
+            repo_id=DATASET_REPO,
+            filename=filename,
+            repo_type="dataset"
+            # token=None or omitted → anonymous access
+        )
+        print(f"Downloaded {filename} using hf_hub_download")
+        return pd.read_csv(local_path)
+    
+    except Exception as e:
+        print(f"hf_hub_download failed for {filename}: {e}")
+        print("Falling back to direct raw URL...")
+        
+        # Fallback: direct Hugging Face resolve URL (works well for public files)
+        url = f"https://huggingface.co/datasets/{DATASET_REPO}/resolve/main/{filename}?download=true"
+        try:
+            df = pd.read_csv(url)
+            print(f"Loaded {filename} using direct URL fallback")
+            return df
+        except Exception as fallback_err:
+            raise RuntimeError(f"Both hf_hub_download and direct URL failed for {filename}. Error: {fallback_err}")
 
 print("Downloading and loading data...")
 
 Xtrain = load_hf_csv("Xtrain.csv")
 Xtest = load_hf_csv("Xtest.csv")
-ytrain = load_hf_csv("ytrain.csv").iloc[:, 0]   # Convert to 1D Series
-ytest = load_hf_csv("ytest.csv").iloc[:, 0]
+ytrain_df = load_hf_csv("ytrain.csv")
+ytest_df = load_hf_csv("ytest.csv")
+
+# Convert target to 1D Series (critical for XGBoost)
+ytrain = ytrain_df.iloc[:, 0]
+ytest = ytest_df.iloc[:, 0]
 
 print(f"Data loaded successfully!")
 print(f"Xtrain shape: {Xtrain.shape}, ytrain shape: {ytrain.shape}")
@@ -41,19 +62,12 @@ print(f"Xtest shape: {Xtest.shape}, ytest shape: {ytest.shape}")
 # 2. Preprocessing
 # ==========================
 numeric_features = [
-    'Product_Weight',
-    'Product_Allocated_Area',
-    'Product_MRP',
-    'Store_Establishment_Year'
+    'Product_Weight', 'Product_Allocated_Area', 'Product_MRP', 'Store_Establishment_Year'
 ]
 
 categorical_features = [
-    'Product_Sugar_Content',
-    'Product_Type',
-    'Store_Size',
-    'Store_Location_City_Type',
-    'Store_Type',
-    'Store_Id'
+    'Product_Sugar_Content', 'Product_Type', 'Store_Size',
+    'Store_Location_City_Type', 'Store_Type', 'Store_Id'
 ]
 
 preprocessor = make_column_transformer(
@@ -68,7 +82,7 @@ xgb_model = xgb.XGBRegressor(random_state=42, n_jobs=-1)
 
 model_pipeline = Pipeline([
     ('preprocessor', preprocessor),
-    ('xgb', xgb_model)          # Explicit name → easier param grid
+    ('xgb', xgb_model)
 ])
 
 param_grid = {
@@ -92,8 +106,7 @@ grid_search = GridSearchCV(
 print("\nStarting Grid Search...")
 grid_search.fit(Xtrain, ytrain)
 
-print("\nBest Params:")
-print(grid_search.best_params_)
+print("\nBest Params:", grid_search.best_params_)
 
 # ==========================
 # 4. Evaluation
@@ -105,32 +118,22 @@ y_pred_test = best_model.predict(Xtest)
 
 print("\nTraining Evaluation:")
 print(f"R2 Score: {r2_score(ytrain, y_pred_train):.4f}")
-print(f"Mean Squared Error: {mean_squared_error(ytrain, y_pred_train):.4f}")
+print(f"MSE: {mean_squared_error(ytrain, y_pred_train):.4f}")
 
 print("\nTest Evaluation:")
 print(f"R2 Score: {r2_score(ytest, y_pred_test):.4f}")
-print(f"Mean Squared Error: {mean_squared_error(ytest, y_pred_test):.4f}")
+print(f"MSE: {mean_squared_error(ytest, y_pred_test):.4f}")
 
 # ==========================
-# 5. Save Model
+# 5. Save & Upload Model
 # ==========================
 joblib.dump(best_model, "model.joblib")
-print("\nModel saved as model.joblib")
+print("\nModel saved locally as model.joblib")
 
-# ==========================
-# 6. Upload to Hugging Face Model Repo
-# ==========================
 api = HfApi(token=os.getenv("HF_TOKEN"))
-
 repo_id = "swastisubi/SuperKart"
 
-# Create repo if it doesn't exist
-create_repo(
-    repo_id=repo_id,
-    repo_type="model",
-    exist_ok=True,
-    token=os.getenv("HF_TOKEN")
-)
+create_repo(repo_id=repo_id, repo_type="model", exist_ok=True, token=os.getenv("HF_TOKEN"))
 
 api.upload_file(
     path_or_fileobj="model.joblib",
@@ -140,4 +143,4 @@ api.upload_file(
     token=os.getenv("HF_TOKEN")
 )
 
-print(f"\nModel successfully uploaded to https://huggingface.co/{repo_id}")
+print(f"\n✅ Model uploaded successfully to: https://huggingface.co/{repo_id}")
