@@ -17,10 +17,10 @@ from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
 
 api = HfApi()
 
-Xtrain_path = "https://huggingface.co/datasets/swastisubi/SuperKart/Xtrain.csv"
-Xtest_path = "https://huggingface.co/datasets/swastisubi/SuperKart/Xtest.csv"
-ytrain_path = "https://huggingface.co/datasets/swastisubi/SuperKart/ytrain.csv"
-ytest_path = "https://huggingface.co/datasets/swastisubi/SuperKart/ytest.csv"
+Xtrain_path = "hf://datasets/swastisubi/SuperKart/Xtrain.csv"
+Xtest_path = "hf://datasets/swastisubi/SuperKart/Xtest.csv"
+ytrain_path = "hf://datasets/swastisubi/SuperKart/ytrain.csv"
+ytest_path = "hf://datasets/swastisubi/SuperKart/ytest.csv"
 
 Xtrain = pd.read_csv(Xtrain_path)
 Xtest = pd.read_csv(Xtest_path)
@@ -91,8 +91,7 @@ print(f"R2 Score: {r2_score(ytest, y_pred_test):.4f}")
 print(f"Mean Squared Error: {mean_squared_error(ytest, y_pred_test):.4f}")
 
 # Save best model
-joblib.dump(best_model, "SuperKart_model_v2.joblib")
-joblib.dump(best_model, "SuperKart_model_v1.joblib")
+joblib.dump(best_model, "model.joblib")
 
 # Upload to Hugging Face
 repo_id = "swastisubi/SuperKart"
@@ -111,8 +110,11 @@ except RepositoryNotFoundError:
 
 # create_repo("SuperKart", repo_type="model", private=False)
 api.upload_file(
-    path_or_fileobj="SuperKart_model_v1.joblib",
-    path_in_repo="SuperKart_model_v1.joblib",
+    path_or_fileobj="model.joblib",
+    path_in_repo="model.joblib",
     repo_id=repo_id,
     repo_type=repo_type,
 )
+
+
+
