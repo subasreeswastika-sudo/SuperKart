@@ -1,3 +1,4 @@
+%%writefile SuperKart/model_building/train.py
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import make_column_transformer
@@ -38,8 +39,7 @@ model_pipeline = Pipeline([
 param_grid = {
     'xgb__n_estimators': [100, 200],
     'xgb__max_depth': [3, 5, 7],
-    'xgb__learning_rate': [0.05, 0.1],
-    'xgb__reg_lambda': [0.5, 1.0]
+    'xgb__learning_rate': [0.05, 0.1]
 }
 
 print("Starting Grid Search...")
@@ -52,13 +52,17 @@ print("Best Parameters:", grid_search.best_params_)
 # Evaluation
 y_pred = best_model.predict(X_test)
 print(f"R² Score: {r2_score(y_test, y_pred):.4f}")
-print(f"RMSE: {mean_squared_error(y_test, y_pred, squared=False):.2f}")
 
-# Save and Upload
+# Fixed RMSE calculation (compatible with sklearn 1.6+)
+rmse = mean_squared_error(y_test, y_pred) ** 0.5
+print(f"RMSE: {rmse:.2f}")
+
+# Save and Upload Model
 joblib.dump(best_model, "model.joblib")
 
 api = HfApi(token=os.getenv("HF_TOKEN"))
 repo_id = "swastisubi/SuperKart"
+
 create_repo(repo_id, repo_type="model", exist_ok=True, private=False)
 
 api.upload_file(
@@ -66,6 +70,7 @@ api.upload_file(
     path_in_repo="model.joblib",
     repo_id=repo_id,
     repo_type="model",
-    commit_message="Final XGBoost model with full features including Store_Id"
+    commit_message="Fixed RMSE calculation for sklearn 1.6+"
 )
+
 print("✅ Best model successfully registered on Hugging Face Model Hub!")
