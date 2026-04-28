@@ -1,4 +1,3 @@
-%%writefile SuperKart/model_building/train.py
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import make_column_transformer
@@ -10,7 +9,9 @@ import joblib
 import os
 from huggingface_hub import HfApi, create_repo
 
-# Load data from HF
+print("Loading data from Hugging Face...")
+
+# Load data from HF Dataset
 train = pd.read_csv("hf://datasets/swastisubi/SuperKart/train.csv")
 test = pd.read_csv("hf://datasets/swastisubi/SuperKart/test.csv")
 
@@ -18,6 +19,8 @@ X_train = train.drop('Product_Store_Sales_Total', axis=1)
 y_train = train['Product_Store_Sales_Total']
 X_test = test.drop('Product_Store_Sales_Total', axis=1)
 y_test = test['Product_Store_Sales_Total']
+
+print(f"Train shape: {X_train.shape}, Test shape: {X_test.shape}")
 
 # Preprocessor
 numeric_features = ['Product_Weight', 'Product_Allocated_Area', 'Product_MRP', 'Store_Establishment_Year']
@@ -53,13 +56,14 @@ print("Best Parameters:", grid_search.best_params_)
 y_pred = best_model.predict(X_test)
 print(f"R² Score: {r2_score(y_test, y_pred):.4f}")
 
-# Fixed RMSE calculation (compatible with sklearn 1.6+)
 rmse = mean_squared_error(y_test, y_pred) ** 0.5
 print(f"RMSE: {rmse:.2f}")
 
-# Save and Upload Model
+# Save model locally
 joblib.dump(best_model, "model.joblib")
+print("Model saved as model.joblib")
 
+# Upload to Hugging Face Model Hub
 api = HfApi(token=os.getenv("HF_TOKEN"))
 repo_id = "swastisubi/SuperKart"
 
@@ -70,7 +74,7 @@ api.upload_file(
     path_in_repo="model.joblib",
     repo_id=repo_id,
     repo_type="model",
-    commit_message="Fixed RMSE calculation for sklearn 1.6+"
+    commit_message="Upload best XGBoost model - Fixed for sklearn 1.6+"
 )
 
-print("✅ Best model successfully registered on Hugging Face Model Hub!")
+print("✅ Best model successfully uploaded to Hugging Face Model Hub!")
